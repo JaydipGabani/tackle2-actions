@@ -1,0 +1,107 @@
+name: Install tackle operator
+inputs: 
+  tackle-hub-image:
+    description: "image url for tackle-hub"
+    required: false
+    default: "quay.io/konveyor/tackle2-hub:latest"
+  pathfinder-image:
+    description: "image url for pathfinder image"
+    required: false
+    default: "quay.io/konveyor/tackle-pathfinder:1.3.0-native"
+  tackle-ui-image:
+    description: "image url for tackle-ui"
+    required: false
+    default: "quay.io/konveyor/tackle2-ui:latest"
+  tackle-addon-admin-image:
+    description: "image urd for admin addon"
+    required: false
+    default: "quay.io/konveyor/tackle2-addon:latest"
+  tackle-addon-windup-image:
+    description: "image url for windup addon"
+    required: false
+    default: "quay.io/konveyor/tackle2-addon-windup:latest"
+  tackle-operator-index-image:
+    description: "image url for operator index"
+    required: false
+    default: "quay.io/konveyor/tackle2-operator-index:latest"
+  tackle-operator-container-image:
+    description: "image url for operator container"
+    required: false
+    default: "quay.io/konveyor/tackle2-operator:latest"
+runs:
+  using: "composite"
+  steps:
+  - name: Creating namespace
+    run: kubectl create ns konveyor-tackle
+    shell: bash
+  - name: Creating catalog source
+    shell: bash
+    run: |
+      cat << EOF | kubectl apply -f -
+      apiVersion: operators.coreos.com/v1alpha1
+      kind: CatalogSource
+      metadata:
+        name: konveyor-tackle
+        namespace: konveyor-tackle
+      spec:
+        displayName: Tackle Operator
+        publisher: Konveyor
+        sourceType: grpc
+        image: ${{ inputs.tackle-operator-index-image }}
+      EOF
+  - name: Creating operator group
+    shell: bash
+    run: |
+      cat << EOF | kubectl apply -f -
+      apiVersion: operators.coreos.com/v1
+      kind: OperatorGroup
+      metadata:
+        name: konveyor-tackle
+        namespace: konveyor-tackle
+      spec:
+        targetNamespaces:
+          - konveyor-tackle
+      EOF
+  - name: Creating subscription
+    shell: bash
+    run: |
+      cat << EOF | kubectl apply -f -
+      apiVersion: operators.coreos.com/v1alpha1
+      kind: Subscription
+      metadata:
+        name: tackle-operator
+        namespace: konveyor-tackle
+      spec:
+        channel: development
+        installPlanApproval: Automatic
+        name: tackle-operator
+        source: konveyor-tackle
+        sourceNamespace: konveyor-tackle
+        config:
+          env:
+          - name: RELATED_IMAGE_TACKLE_HUB
+            value: ${{ inputs.tackle-hub-image }}
+          - name: RELATED_IMAGE_PATHFINDER
+            value: ${{ inputs.pathfinder-image }}
+          - name: RELATED_IMAGE_TACKLE_UI
+            value: ${{ inputs.tackle-ui-image }}
+          - name: RELATED_IMAGE_ADDON_ADMIN
+            value: ${{ inputs.tackle-addon-admin-image }}
+          - name: RELATED_IMAGE_ADDON_WINDUP
+            value: ${{ inputs.tackle-addon-windup-image }}
+      EOF
+  - name: Get pods in namespace
+    run: kubectl --namespace konveyor-tackle wait --for=condition=ready pod --selector=name=tackle-operator --timeout=180s
+    shell: bash
+  - name: Creating tackle CR
+    shell: bash
+    run: |
+      cat << EOF | kubectl apply -f -
+      kind: Tackle
+      apiVersion: tackle.konveyor.io/v1alpha1
+      metadata:
+        name: tackle
+        namespace: konveyor-tackle
+      spec:
+        feature_auth_required: false
+      EOF

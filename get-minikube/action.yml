@@ -1,0 +1,13 @@
+name: Get minikube cluster
+runs:
+  using: "composite"
+  steps:
+  - uses: actions/checkout@v2
+  - name: Start minikube
+    uses: medyagh/setup-minikube@master
+  - name: Enable ingress
+    run: minikube addons enable ingress
+    shell: bash
+  - name: Enable OLM
+    run: minikube addons enable olm
+    shell: bash
